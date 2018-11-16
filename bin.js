@@ -99,7 +99,7 @@ const result = commist()
       process.exit(1)
     }
   })
-  .register('ask', function (argv) {
+  .register('ask', async function (argv) {
     const defaultUploadURL = 'https://upload.clinicjs.org'
     const args = minimist(argv, {
       alias: {
@@ -126,11 +126,12 @@ const result = commist()
         })
         // ignore the next line since authenticate is covered by it's own test
         const authMethod = authMethods[args['auth-method']] || /* istanbul ignore next */ authenticate
-        return processAsk(args, authMethod)
-          .catch(function (err) {
-            console.error('Unexpected Error', err)
-            process.exit(1)
-          })
+        try {
+          await processAsk(args, authMethod)
+        } catch (err) {
+          console.error('Unexpected Error', err)
+          process.exit(1)
+        }
       })
     } else {
       printHelp('clinic-ask')
@@ -147,7 +148,7 @@ const result = commist()
     if (args.help) {
       printHelp('clinic-clean')
     } else {
-      // support --path to support failure testing
+    // support --path to support failure testing
       clean(args.path || '.', function (err) {
         if (err) throw err
       })
@@ -260,7 +261,7 @@ const result = commist()
     } else if (args.help) {
       printHelp('clinic-flame', version)
     } /* istanbul ignore next */ else if (args['visualize-only'] || args['--'].length > 1) {
-      /* istanbul ignore next */
+    /* istanbul ignore next */
       trackTool('flame', args, version, () => {
         runTool(args, require('@nearform/flame'))
       })
@@ -396,7 +397,8 @@ function runTool (args, Tool, version) {
     tool.visualize(filename, html, function (err) {
       if (err) return cb(err)
       hash(html, function (err, h) {
-        /* istanbul ignore next */ if (err) return cb(err)
+        /* istanbul ignore next */
+        if (err) return cb(err)
 
         const info = {
           tool: name,
@@ -439,7 +441,7 @@ function checkForUpdates () {
 }
 
 function tarAndUploadFile (uploadURL, authToken, email) {
-  return async (filename) => {
+  return (filename) => {
     // filename may either be .clinic-doctor.html or the data directory
     // .clinic-doctor
     const filePrefix = path.join(filename).replace(/\.html$/, '')
@@ -450,19 +452,15 @@ function tarAndUploadFile (uploadURL, authToken, email) {
   }
 }
 
-function processAsk (args, authMethod) {
-  return authMethod(args['upload-url'])
-    .then(function (authToken) {
-      const { email } = jwt.decode(authToken)
-      const uploadURL = args['upload-url']
-      const uploaderFunc = tarAndUploadFile(uploadURL, authToken, email)
+async function processAsk (args, authMethod) {
+  const authToken = await authMethod(args['upload-url'])
+  const { email } = jwt.decode(authToken)
+  const uploadURL = args['upload-url']
+  const uploaderFunc = tarAndUploadFile(uploadURL, authToken, email)
 
-      return new Promise((resolve, reject) => {
-        async.eachSeries(args._, uploaderFunc, err => err ? reject(err) : resolve())
-      })
-        .then(() => {
-          console.log(`The data has been uploaded to private area for user ${email}`)
-          console.log(`Thanks for contacting NearForm, we will reply as soon as possible.`)
-        })
-    })
+  // run in series
+  await args._.reduce((p, item) => p.then(() => uploaderFunc(item)), Promise.resolve())
+
+  console.log(`The data has been uploaded to private area for user ${email}`)
+  console.log(`Thanks for contacting NearForm, we will reply as soon as possible.`)
 }
