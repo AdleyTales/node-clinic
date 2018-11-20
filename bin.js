@@ -441,14 +441,17 @@ function checkForUpdates () {
 }
 
 function tarAndUploadFile (uploadURL, authToken, email) {
-  return (filename) => {
+  return async (filename) => {
     // filename may either be .clinic-doctor.html or the data directory
     // .clinic-doctor
     const filePrefix = path.join(filename).replace(/\.html$/, '')
+    const htmlFile = path.basename(filename) + '.html'
 
     console.log(`Uploading private data for user ${email} for ${filePrefix} and ${filePrefix}.html to ${uploadURL}`)
 
-    return tarAndUploadPromisified(path.resolve(filePrefix), uploadURL, authToken)
+    const result = await tarAndUploadPromisified(path.resolve(filePrefix), uploadURL, authToken)
+
+    return { id: result.id, url: `${uploadURL}/private/${result.id}/${htmlFile}` }
   }
 }
 
@@ -459,8 +462,12 @@ async function processAsk (args, authMethod) {
   const uploaderFunc = tarAndUploadFile(uploadURL, authToken, email)
 
   // run in series
-  await args._.reduce((p, item) => p.then(() => uploaderFunc(item)), Promise.resolve())
+  const results = await args._.reduce((p, item) => p.then(results => uploaderFunc(item).then(result => {
+    results.push(result)
+    return results
+  })), Promise.resolve([]))
 
   console.log(`The data has been uploaded to private area for user ${email}`)
+  results.forEach(result => console.log(result.url))
   console.log(`Thanks for contacting NearForm, we will reply as soon as possible.`)
 }
