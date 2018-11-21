@@ -99,7 +99,7 @@ const result = commist()
       process.exit(1)
     }
   })
-  .register('ask', async function (argv) {
+  .register('ask', function (argv) {
     const defaultUploadURL = 'https://upload.clinicjs.org'
     const args = minimist(argv, {
       alias: {
